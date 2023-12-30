@@ -1,9 +1,18 @@
-import { Book } from "../models/book";
+import { Book, bookValidator } from "../models/book.js";
 import mongoose from "mongoose";
 
 export const getAllBooks = async (req, res) => {
+    let { search, numPages, page, perPage } = req.query;
     try {
-        let allBooks = await Book.find({})
+        let allBooks;
+        let searchObject = {};
+        if (search)
+            searchObject.name = new RegExp(search, "i");
+        if (numPages)
+            searchObject.numPages = numPages;
+        allBooks = await Book.find(searchObject)
+            .skip((page - 1) * perPage)
+            .limit(perPage);
         res.json(allBooks)
     }
     catch (err) {
@@ -57,17 +66,36 @@ export const updateBook = async (req, res) => {
 
 export const addBook = async (req, res) => {
     let { name, numPages, isComics, publishDate } = req.body;
-    if (!name || !numPages)
-        return res.status(404).send("לא נשלח שם או מספר עמודים")
+
+    let validate = bookValidator(req.body);
+    if (validate.error)
+        return res.status(400).send(validate.error[0]);
     try {
         let sameBook = await Book.find({ numPages, name });
         if (sameBook.length > 0)
             return res.status(409).send("כבר קיים ספר עם כאלו נתונים")
         let newBook = Book.create({ name, numPages, isComics: isComics || false, publishDate })
-        await newBook.save();
+
         return res.status(201).json(newBook)
     }
-    catch (err){
-        res.status(400).send("אי אפשר להוסיף ספר זה"+err.message)
+    catch (err) {
+        res.status(400).send("אי אפשר להוסיף ספר זה" + err.message)
+    }
+}
+export const booksBetween = async (req, res) => {
+    let { from, to, perPage, page } = req.query;
+    try {
+        let searchObject = {};
+        if (from)
+            searchObject.numPages = { $gte: from }
+        if (to)
+            searchObject.numPages = { $lte: to }
+        let allbooks = await Book.find(searchObject)
+            .skip((page - 1) * perPage)
+            .limit(perPage);
+        res.json(allbooks)
+    }
+    catch (err) {
+        res.status(400).send("לא ניתן לקבל את הספרים " + err.message)
     }
 }
